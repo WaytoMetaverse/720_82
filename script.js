@@ -67,9 +67,6 @@ class PanoramaViewer {
         // 绑定事件
         this.bindEvents();
         
-        // 渲染对象列表
-        this.renderObjectsList();
-        
         // 加载初始场景
         this.loadScene(this.currentSpace);
     }
@@ -201,11 +198,9 @@ class PanoramaViewer {
     }
     
     resizeCanvas() {
-        const container = this.panoramaCanvas.parentElement;
-        const rect = container.getBoundingClientRect();
-        
-        this.panoramaCanvas.width = rect.width - 40;
-        this.panoramaCanvas.height = 600;
+        // 全屏尺寸
+        this.panoramaCanvas.width = window.innerWidth;
+        this.panoramaCanvas.height = window.innerHeight;
         
         this.idCanvas.width = this.panoramaCanvas.width;
         this.idCanvas.height = this.panoramaCanvas.height;
@@ -227,7 +222,7 @@ class PanoramaViewer {
         this.panoramaCanvas.addEventListener('touchend', (e) => this.onTouchEnd(e));
         
         // 空间切换按钮
-        document.querySelectorAll('.space-btn').forEach(btn => {
+        document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const space = e.target.dataset.space;
                 this.switchSpace(space);
@@ -320,25 +315,33 @@ class PanoramaViewer {
     getObjectAtPosition(x, y) {
         // 将canvas坐标转换为全景图坐标
         const space = this.config[this.currentSpace];
-        if (!space || !space.idMap) return null;
+        if (!space || !space.idMap || !space.objects || space.objects.length === 0) return null;
         
-        const scaleX = space.idMap.width / this.panoramaCanvas.width;
-        const scaleY = space.idMap.height / this.panoramaCanvas.height;
+        // 直接从ID canvas读取像素
+        const px = Math.floor(x);
+        const py = Math.floor(y);
         
-        const panoramaX = Math.floor(x * scaleX);
-        const panoramaY = Math.floor(y * scaleY);
+        if (px < 0 || px >= this.idCanvas.width || py < 0 || py >= this.idCanvas.height) {
+            return null;
+        }
         
         // 获取ID图上该位置的像素颜色
-        const imageData = this.idCtx.getImageData(0, 0, this.idCanvas.width, this.idCanvas.height);
-        const index = (panoramaY * this.idCanvas.width + panoramaX) * 4;
+        const imageData = this.idCtx.getImageData(px, py, 1, 1);
+        const r = imageData.data[0];
+        const g = imageData.data[1];
+        const b = imageData.data[2];
         
-        const r = imageData.data[index];
-        const g = imageData.data[index + 1];
-        const b = imageData.data[index + 2];
+        console.log(`鼠标位置 (${px}, ${py}) 的RGB: (${r}, ${g}, ${b})`);
         
-        // 匹配对象
+        // 匹配对象（使用更宽松的匹配，考虑JPG压缩）
         for (let obj of space.objects) {
-            if (obj.rgb[0] === r && obj.rgb[1] === g && obj.rgb[2] === b) {
+            const rDiff = Math.abs(obj.rgb[0] - r);
+            const gDiff = Math.abs(obj.rgb[1] - g);
+            const bDiff = Math.abs(obj.rgb[2] - b);
+            
+            // 允许10的色差容忍度
+            if (rDiff <= 10 && gDiff <= 10 && bDiff <= 10) {
+                console.log(`匹配到物件: ${obj.name}`);
                 return obj;
             }
         }
@@ -387,7 +390,6 @@ class PanoramaViewer {
             
             try {
                 await this.loadSpaceImages('living', filename);
-                this.renderObjectsList();
                 this.render();
             } catch (error) {
                 console.error('加载新图片失败', error);
@@ -412,14 +414,13 @@ class PanoramaViewer {
         }
         
         // 更新按钮状态
-        document.querySelectorAll('.space-btn').forEach(btn => {
+        document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.classList.remove('active');
             if (btn.dataset.space === spaceKey) {
                 btn.classList.add('active');
             }
         });
         
-        this.renderObjectsList();
         this.loadScene(spaceKey);
     }
     
@@ -438,22 +439,65 @@ class PanoramaViewer {
         this.panoramaCtx.clearRect(0, 0, this.panoramaCanvas.width, this.panoramaCanvas.height);
         this.idCtx.clearRect(0, 0, this.idCanvas.width, this.idCanvas.height);
         
-        // 计算偏移（循环全景）
-        const offset = this.currentX % space.panorama.width;
+        const panoramaImg = space.panorama;
+        const idMapImg = space.idMap;
         
-        // 绘制全景图
+        // 计算缩放比例（保持纵横比，填充高度）
+        const scale = this.panoramaCanvas.height / panoramaImg.height;
+        const scaledWidth = panoramaImg.width * scale;
+        
+        // 计算当前偏移（支持无限循环）
+        let offsetX = this.currentX % scaledWidth;
+        if (offsetX > 0) offsetX -= scaledWidth;
+        
+        // 绘制全景图（循环平铺）
+        // 绘制当前视图
         this.panoramaCtx.drawImage(
-            space.panorama,
-            0, 0, space.panorama.width, space.panorama.height,
-            offset, 0, this.panoramaCanvas.width, this.panoramaCanvas.height
+            panoramaImg,
+            0, 0, panoramaImg.width, panoramaImg.height,
+            offsetX, 0, scaledWidth, this.panoramaCanvas.height
         );
         
-        // 绘制ID图（隐藏的，用于检测）
+        // 绘制右侧循环部分
+        if (offsetX + scaledWidth < this.panoramaCanvas.width) {
+            this.panoramaCtx.drawImage(
+                panoramaImg,
+                0, 0, panoramaImg.width, panoramaImg.height,
+                offsetX + scaledWidth, 0, scaledWidth, this.panoramaCanvas.height
+            );
+        }
+        
+        // 绘制左侧循环部分（向左拖动时）
+        if (offsetX > -scaledWidth) {
+            this.panoramaCtx.drawImage(
+                panoramaImg,
+                0, 0, panoramaImg.width, panoramaImg.height,
+                offsetX - scaledWidth, 0, scaledWidth, this.panoramaCanvas.height
+            );
+        }
+        
+        // 绘制ID图（同样的循环逻辑）
         this.idCtx.drawImage(
-            space.idMap,
-            0, 0, space.idMap.width, space.idMap.height,
-            offset, 0, this.idCanvas.width, this.idCanvas.height
+            idMapImg,
+            0, 0, idMapImg.width, idMapImg.height,
+            offsetX, 0, scaledWidth, this.panoramaCanvas.height
         );
+        
+        if (offsetX + scaledWidth < this.panoramaCanvas.width) {
+            this.idCtx.drawImage(
+                idMapImg,
+                0, 0, idMapImg.width, idMapImg.height,
+                offsetX + scaledWidth, 0, scaledWidth, this.panoramaCanvas.height
+            );
+        }
+        
+        if (offsetX > -scaledWidth) {
+            this.idCtx.drawImage(
+                idMapImg,
+                0, 0, idMapImg.width, idMapImg.height,
+                offsetX - scaledWidth, 0, scaledWidth, this.panoramaCanvas.height
+            );
+        }
         
         // 绘制高光效果
         if (this.hoveredObject) {
@@ -462,14 +506,16 @@ class PanoramaViewer {
     }
     
     drawHighlight() {
-        const space = this.config[this.currentSpace];
         const imageData = this.idCtx.getImageData(0, 0, this.idCanvas.width, this.idCanvas.height);
         
         // 创建高光覆盖层
-        this.panoramaCtx.fillStyle = 'rgba(255, 255, 0, 0.2)';
+        this.panoramaCtx.fillStyle = 'rgba(255, 255, 100, 0.3)';
+        this.panoramaCtx.strokeStyle = 'rgba(255, 255, 100, 0.8)';
+        this.panoramaCtx.lineWidth = 2;
         
         const rgb = this.hoveredObject.rgb;
         
+        // 找出所有匹配的像素
         for (let y = 0; y < this.idCanvas.height; y++) {
             for (let x = 0; x < this.idCanvas.width; x++) {
                 const index = (y * this.idCanvas.width + x) * 4;
@@ -477,44 +523,16 @@ class PanoramaViewer {
                 const g = imageData.data[index + 1];
                 const b = imageData.data[index + 2];
                 
-                if (r === rgb[0] && g === rgb[1] && b === rgb[2]) {
-                    this.panoramaCtx.fillRect(x, y, 1, 1);
+                // 使用更宽松的匹配（考虑JPG压缩）
+                const rDiff = Math.abs(r - rgb[0]);
+                const gDiff = Math.abs(g - rgb[1]);
+                const bDiff = Math.abs(b - rgb[2]);
+                
+                if (rDiff <= 10 && gDiff <= 10 && bDiff <= 10) {
+                    this.panoramaCtx.fillRect(x, y, 2, 2);
                 }
             }
         }
-    }
-    
-    renderObjectsList() {
-        const space = this.config[this.currentSpace];
-        const container = document.getElementById('objectsList');
-        container.innerHTML = '';
-        
-        if (!space.objects || space.objects.length === 0) {
-            container.innerHTML = '<p style="color: #999; font-size: 14px;">此空间暂无可互动物件</p>';
-            return;
-        }
-        
-        space.objects.forEach(obj => {
-            const item = document.createElement('div');
-            item.className = 'object-item';
-            
-            const colorIndicator = document.createElement('div');
-            colorIndicator.className = 'color-indicator';
-            colorIndicator.style.backgroundColor = obj.color;
-            
-            const name = document.createElement('span');
-            name.className = 'object-name';
-            name.textContent = obj.name;
-            
-            const variantInfo = document.createElement('span');
-            variantInfo.className = 'object-name';
-            variantInfo.textContent = `(${obj.variants[obj.currentVariant]}款 - ${obj.currentVariant + 1}/${obj.variants.length})`;
-            
-            item.appendChild(colorIndicator);
-            item.appendChild(name);
-            item.appendChild(variantInfo);
-            container.appendChild(item);
-        });
     }
 }
 
