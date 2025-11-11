@@ -28,6 +28,10 @@ class PanoramaViewer {
         this.phi = 0;
         this.theta = 0;
         
+        // 雙指縮放相關
+        this.initialPinchDistance = 0;
+        this.initialFov = 75;
+        
         // 滑鼠位置和高光
         this.mouseX = 0;
         this.mouseY = 0;
@@ -278,10 +282,18 @@ class PanoramaViewer {
         // 觸摸事件（使用passive: false以支持preventDefault）
         this.container.addEventListener('touchstart', (e) => this.onPointerStart(e), { passive: false });
         this.container.addEventListener('touchmove', (e) => this.onPointerMove(e), { passive: false });
-        this.container.addEventListener('touchend', (e) => this.onPointerEnd(e), { passive: false });
+        this.container.addEventListener('touchend', (e) => {
+            this.onPointerEnd(e);
+            // 觸摸結束時也觸發點擊檢測
+            this.onClick(e);
+        }, { passive: false });
         
-        // 點擊事件
-        this.container.addEventListener('click', (e) => this.onClick(e), false);
+        // 點擊事件（僅用於滑鼠）
+        this.container.addEventListener('click', (e) => {
+            // 只處理滑鼠點擊，不處理觸摸
+            if (e.type === 'click' && !e.isTrusted) return;
+            this.onClick(e);
+        }, false);
         
         // 窗口大小改變
         window.addEventListener('resize', () => this.onWindowResize(), false);
@@ -307,13 +319,34 @@ class PanoramaViewer {
         
         this.isUserInteracting = true;
         
-        const clientX = event.clientX || event.touches[0].clientX;
-        const clientY = event.clientY || event.touches[0].clientY;
-        
-        this.onPointerDownMouseX = clientX;
-        this.onPointerDownMouseY = clientY;
-        this.onPointerDownLon = this.lon;
-        this.onPointerDownLat = this.lat;
+        if (event.touches) {
+            // 觸摸事件
+            if (event.touches.length === 1) {
+                // 單指 - 旋轉
+                const clientX = event.touches[0].clientX;
+                const clientY = event.touches[0].clientY;
+                
+                this.onPointerDownMouseX = clientX;
+                this.onPointerDownMouseY = clientY;
+                this.onPointerDownLon = this.lon;
+                this.onPointerDownLat = this.lat;
+            } else if (event.touches.length === 2) {
+                // 雙指 - 縮放
+                const dx = event.touches[0].clientX - event.touches[1].clientX;
+                const dy = event.touches[0].clientY - event.touches[1].clientY;
+                this.initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
+                this.initialFov = this.camera.fov;
+            }
+        } else {
+            // 滑鼠事件
+            const clientX = event.clientX;
+            const clientY = event.clientY;
+            
+            this.onPointerDownMouseX = clientX;
+            this.onPointerDownMouseY = clientY;
+            this.onPointerDownLon = this.lon;
+            this.onPointerDownLat = this.lat;
+        }
         
         this.container.style.cursor = 'grabbing';
         
@@ -324,25 +357,51 @@ class PanoramaViewer {
     }
     
     onPointerMove(event) {
-        const clientX = event.clientX || (event.touches ? event.touches[0].clientX : 0);
-        const clientY = event.clientY || (event.touches ? event.touches[0].clientY : 0);
-        
-        this.mouseX = clientX;
-        this.mouseY = clientY;
-        
-        if (this.isUserInteracting) {
-            // 移動端使用更高的靈敏度
-            const sensitivity = event.touches ? 0.15 : 0.1;
-            this.lon = (this.onPointerDownMouseX - clientX) * sensitivity + this.onPointerDownLon;
-            this.lat = (clientY - this.onPointerDownMouseY) * sensitivity + this.onPointerDownLat;
+        if (event.touches) {
+            // 觸摸事件
+            if (event.touches.length === 1) {
+                // 單指 - 旋轉
+                const clientX = event.touches[0].clientX;
+                const clientY = event.touches[0].clientY;
+                
+                this.mouseX = clientX;
+                this.mouseY = clientY;
+                
+                if (this.isUserInteracting) {
+                    const sensitivity = 0.15;
+                    this.lon = (this.onPointerDownMouseX - clientX) * sensitivity + this.onPointerDownLon;
+                    this.lat = (clientY - this.onPointerDownMouseY) * sensitivity + this.onPointerDownLat;
+                }
+            } else if (event.touches.length === 2) {
+                // 雙指 - 縮放
+                const dx = event.touches[0].clientX - event.touches[1].clientX;
+                const dy = event.touches[0].clientY - event.touches[1].clientY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (this.initialPinchDistance > 0) {
+                    const ratio = this.initialPinchDistance / distance;
+                    const newFov = this.initialFov * ratio;
+                    this.camera.fov = THREE.MathUtils.clamp(newFov, 30, 90);
+                    this.camera.updateProjectionMatrix();
+                }
+            }
             
             // 防止觸摸時頁面滾動
-            if (event.type === 'touchmove') {
-                event.preventDefault();
-            }
+            event.preventDefault();
         } else {
-            // 只在桌面端檢測懸停，移動端不需要
-            if (!event.touches) {
+            // 滑鼠事件
+            const clientX = event.clientX;
+            const clientY = event.clientY;
+            
+            this.mouseX = clientX;
+            this.mouseY = clientY;
+            
+            if (this.isUserInteracting) {
+                const sensitivity = 0.1;
+                this.lon = (this.onPointerDownMouseX - clientX) * sensitivity + this.onPointerDownLon;
+                this.lat = (clientY - this.onPointerDownMouseY) * sensitivity + this.onPointerDownLat;
+            } else {
+                // 桌面端檢測懸停
                 this.checkHover(clientX, clientY);
             }
         }
@@ -351,6 +410,11 @@ class PanoramaViewer {
     onPointerEnd(event) {
         this.isUserInteracting = false;
         this.container.style.cursor = 'grab';
+        
+        // 重置雙指縮放狀態
+        if (event.touches && event.touches.length < 2) {
+            this.initialPinchDistance = 0;
+        }
         
         // 防止觸摸結束時的默認行為
         if (event.type === 'touchend') {
@@ -372,11 +436,29 @@ class PanoramaViewer {
     }
     
      onClick(event) {
+         // 獲取點擊座標（處理觸摸和滑鼠事件）
+         let clientX, clientY;
+         
+         if (event.type === 'touchend') {
+             // 觸摸事件使用 changedTouches
+             if (event.changedTouches && event.changedTouches.length > 0) {
+                 clientX = event.changedTouches[0].clientX;
+                 clientY = event.changedTouches[0].clientY;
+             } else {
+                 // 如果沒有changedTouches，使用記錄的位置
+                 clientX = this.onPointerDownMouseX;
+                 clientY = this.onPointerDownMouseY;
+             }
+         } else {
+             clientX = event.clientX;
+             clientY = event.clientY;
+         }
+         
          // 檢查是否真的是點擊（而不是拖動）
          // 移動端使用更大的容差
          const threshold = event.type === 'touchend' ? 15 : 5;
-         const deltaX = Math.abs(event.clientX - this.onPointerDownMouseX);
-         const deltaY = Math.abs(event.clientY - this.onPointerDownMouseY);
+         const deltaX = Math.abs(clientX - this.onPointerDownMouseX);
+         const deltaY = Math.abs(clientY - this.onPointerDownMouseY);
          const isDrag = deltaX > threshold || deltaY > threshold;
          
          if (isDrag) {
@@ -384,7 +466,7 @@ class PanoramaViewer {
              return;
          }
          
-         const result = this.getObjectAtScreenPosition(event.clientX, event.clientY);
+         const result = this.getObjectAtScreenPosition(clientX, clientY);
          console.log('點擊檢測結果:', result);
          
          if (result) {
