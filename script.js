@@ -4,7 +4,7 @@ class PanoramaViewer {
     constructor() {
         this.container = document.getElementById('viewer-container');
         this.idCanvas = document.getElementById('idCanvas');
-        this.idCtx = this.idCanvas.getContext('2d');
+        this.idCtx = this.idCanvas.getContext('2d', { willReadFrequently: true });
         
         // 当前状态
         this.currentSpace = 'living';
@@ -14,7 +14,7 @@ class PanoramaViewer {
         this.camera = null;
         this.renderer = null;
         this.sphere = null;
-        this.idSphere = null;
+        this.highlightMesh = null; // 高光网格
         
         // 交互相关
         this.isUserInteracting = false;
@@ -168,6 +168,15 @@ class PanoramaViewer {
             this.sphere.material.dispose();
         }
         
+        // 移除旧的高光层
+        if (this.highlightMesh) {
+            this.scene.remove(this.highlightMesh);
+            if (this.highlightMesh.material.map) {
+                this.highlightMesh.material.map.dispose();
+            }
+            this.highlightMesh.material.dispose();
+        }
+        
         // 创建全景纹理
         const texture = new THREE.Texture(space.panorama);
         texture.needsUpdate = true;
@@ -177,6 +186,27 @@ class PanoramaViewer {
         this.sphere = new THREE.Mesh(this.sphereGeometry, material);
         this.scene.add(this.sphere);
         
+        // 创建高光层（稍微小一点的球体，避免Z-fighting）
+        const highlightGeometry = new THREE.SphereGeometry(499, 60, 40);
+        highlightGeometry.scale(-1, 1, 1);
+        
+        // 创建高光纹理canvas
+        this.highlightCanvas = document.createElement('canvas');
+        this.highlightCanvas.width = space.idMap.width;
+        this.highlightCanvas.height = space.idMap.height;
+        this.highlightCtx = this.highlightCanvas.getContext('2d');
+        
+        const highlightTexture = new THREE.Texture(this.highlightCanvas);
+        const highlightMaterial = new THREE.MeshBasicMaterial({
+            map: highlightTexture,
+            transparent: true,
+            opacity: 1,
+            depthWrite: false
+        });
+        
+        this.highlightMesh = new THREE.Mesh(highlightGeometry, highlightMaterial);
+        this.scene.add(this.highlightMesh);
+        
         // 更新ID图到canvas
         this.updateIdCanvas(space.idMap);
         
@@ -184,12 +214,29 @@ class PanoramaViewer {
     }
     
     updateIdCanvas(idMapImage) {
-        // 设置ID canvas尺寸与图片相同
-        this.idCanvas.width = idMapImage.width;
-        this.idCanvas.height = idMapImage.height;
+        // 设置ID canvas尺寸与窗口相同（用于显示调试）
+        this.idCanvas.width = window.innerWidth;
+        this.idCanvas.height = window.innerHeight;
+        
+        // 清空canvas
+        this.idCtx.clearRect(0, 0, this.idCanvas.width, this.idCanvas.height);
+        
+        // 计算缩放以填充高度
+        const scale = this.idCanvas.height / idMapImage.height;
+        const scaledWidth = idMapImage.width * scale;
+        
+        // 居中绘制
+        const offsetX = (this.idCanvas.width - scaledWidth) / 2;
         
         // 绘制ID图
-        this.idCtx.drawImage(idMapImage, 0, 0);
+        this.idCtx.drawImage(
+            idMapImage,
+            0, 0, idMapImage.width, idMapImage.height,
+            offsetX, 0, scaledWidth, this.idCanvas.height
+        );
+        
+        // 保存原始ID图用于颜色检测
+        this.idMapImage = idMapImage;
     }
     
     bindEvents() {
@@ -218,6 +265,20 @@ class PanoramaViewer {
                 console.log('切换空间按钮被点击:', space);
                 this.switchSpace(space);
             });
+        });
+        
+        // 调试按钮
+        const debugBtn = document.getElementById('debugBtn');
+        debugBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.idCanvas.classList.toggle('debug-show');
+            if (this.idCanvas.classList.contains('debug-show')) {
+                debugBtn.textContent = '隐藏ID图';
+                console.log('ID图已显示（半透明叠加）');
+            } else {
+                debugBtn.textContent = '显示ID图';
+                console.log('ID图已隐藏');
+            }
         });
     }
     
@@ -272,19 +333,31 @@ class PanoramaViewer {
     }
     
     onClick(event) {
-        if (!this.isUserInteracting) {
-            const result = this.getObjectAtScreenPosition(event.clientX, event.clientY);
-            if (result) {
-                if (result.type === 'space') {
-                    // 点击了空间切换热点
-                    console.log(`点击切换空间: ${result.data.name}`);
-                    this.switchSpace(result.data.space);
-                } else if (result.type === 'object') {
-                    // 点击了家具物件
-                    console.log(`点击了家具: ${result.data.name}`);
-                    this.cycleObjectVariant(result.data);
-                }
+        // 检查是否真的是点击（而不是拖动）
+        const deltaX = Math.abs(event.clientX - this.onPointerDownMouseX);
+        const deltaY = Math.abs(event.clientY - this.onPointerDownMouseY);
+        const isDrag = deltaX > 5 || deltaY > 5;
+        
+        if (isDrag) {
+            console.log('这是拖动操作，不是点击');
+            return;
+        }
+        
+        const result = this.getObjectAtScreenPosition(event.clientX, event.clientY);
+        console.log('点击检测结果:', result);
+        
+        if (result) {
+            if (result.type === 'space') {
+                // 点击了空间切换热点
+                console.log(`点击切换空间: ${result.data.name} -> ${result.data.space}`);
+                this.switchSpace(result.data.space);
+            } else if (result.type === 'object') {
+                // 点击了家具物件
+                console.log(`点击了家具: ${result.data.name}`);
+                this.cycleObjectVariant(result.data);
             }
+        } else {
+            console.log('点击位置无可交互对象');
         }
     }
     
@@ -308,9 +381,13 @@ class PanoramaViewer {
                 } else if (result.type === 'object') {
                     this.showTooltip(clientX, clientY, `点击切换${result.data.name}`);
                 }
+                
+                // 更新高光显示
+                this.updateHighlight(result);
             } else {
                 this.container.classList.remove('highlight');
                 this.hideTooltip();
+                this.clearHighlight();
             }
         } else if (result) {
             // 更新提示框位置
@@ -322,24 +399,90 @@ class PanoramaViewer {
         }
     }
     
+    updateHighlight(result) {
+        if (!this.highlightCanvas || !this.highlightCtx || !this.highlightMesh || !this.idMapImage) return;
+        
+        // 清空高光canvas
+        this.highlightCtx.clearRect(0, 0, this.highlightCanvas.width, this.highlightCanvas.height);
+        
+        // 创建临时canvas读取ID图数据
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = this.idMapImage.width;
+        tempCanvas.height = this.idMapImage.height;
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+        tempCtx.drawImage(this.idMapImage, 0, 0);
+        
+        // 获取ID图数据
+        const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+        const highlightData = this.highlightCtx.createImageData(this.highlightCanvas.width, this.highlightCanvas.height);
+        
+        const targetRgb = result.data.rgb;
+        
+        // 遍历所有像素，找到匹配的区域并高亮
+        for (let i = 0; i < imageData.data.length; i += 4) {
+            const r = imageData.data[i];
+            const g = imageData.data[i + 1];
+            const b = imageData.data[i + 2];
+            
+            const rDiff = Math.abs(targetRgb[0] - r);
+            const gDiff = Math.abs(targetRgb[1] - g);
+            const bDiff = Math.abs(targetRgb[2] - b);
+            
+            if (rDiff <= 15 && gDiff <= 15 && bDiff <= 15) {
+                // 设置高亮颜色（黄色半透明）
+                highlightData.data[i] = 255;     // R
+                highlightData.data[i + 1] = 255; // G
+                highlightData.data[i + 2] = 0;   // B
+                highlightData.data[i + 3] = 120; // A (透明度)
+            }
+        }
+        
+        this.highlightCtx.putImageData(highlightData, 0, 0);
+        this.highlightMesh.material.map.needsUpdate = true;
+    }
+    
+    clearHighlight() {
+        if (!this.highlightCanvas || !this.highlightCtx || !this.highlightMesh) return;
+        
+        this.highlightCtx.clearRect(0, 0, this.highlightCanvas.width, this.highlightCanvas.height);
+        this.highlightMesh.material.map.needsUpdate = true;
+    }
+    
     getObjectAtScreenPosition(clientX, clientY) {
         // 将屏幕坐标转换为球面UV坐标
         const uv = this.screenToUV(clientX, clientY);
-        if (!uv) return null;
-        
-        // 将UV坐标转换为ID图像素坐标
-        const x = Math.floor(uv.x * this.idCanvas.width);
-        const y = Math.floor(uv.y * this.idCanvas.height);
-        
-        if (x < 0 || x >= this.idCanvas.width || y < 0 || y >= this.idCanvas.height) {
+        if (!uv) {
             return null;
         }
         
+        // 使用原始ID图进行检测
+        if (!this.idMapImage) {
+            console.log('ID图未加载');
+            return null;
+        }
+        
+        // 将UV坐标转换为ID图像素坐标
+        const x = Math.floor(uv.x * this.idMapImage.width);
+        const y = Math.floor(uv.y * this.idMapImage.height);
+        
+        if (x < 0 || x >= this.idMapImage.width || y < 0 || y >= this.idMapImage.height) {
+            return null;
+        }
+        
+        // 创建临时canvas读取像素
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = this.idMapImage.width;
+        tempCanvas.height = this.idMapImage.height;
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+        tempCtx.drawImage(this.idMapImage, 0, 0);
+        
         // 读取ID图上的颜色
-        const imageData = this.idCtx.getImageData(x, y, 1, 1);
+        const imageData = tempCtx.getImageData(x, y, 1, 1);
         const r = imageData.data[0];
         const g = imageData.data[1];
         const b = imageData.data[2];
+        
+        console.log(`UV(${uv.x.toFixed(3)}, ${uv.y.toFixed(3)}) -> 像素(${x}, ${y}) -> RGB(${r}, ${g}, ${b})`);
         
         // 1. 首先检查是否是空间切换热点
         for (let key in this.spaceHotspots) {
@@ -349,6 +492,7 @@ class PanoramaViewer {
             const bDiff = Math.abs(hotspot.rgb[2] - b);
             
             if (rDiff <= 15 && gDiff <= 15 && bDiff <= 15) {
+                console.log(`✓ 匹配到空间热点: ${hotspot.name} (色差: R${rDiff} G${gDiff} B${bDiff})`);
                 return { type: 'space', data: hotspot };
             }
         }
@@ -362,6 +506,7 @@ class PanoramaViewer {
                 const bDiff = Math.abs(obj.rgb[2] - b);
                 
                 if (rDiff <= 15 && gDiff <= 15 && bDiff <= 15) {
+                    console.log(`✓ 匹配到家具物件: ${obj.name} (色差: R${rDiff} G${gDiff} B${bDiff})`);
                     return { type: 'object', data: obj };
                 }
             }
