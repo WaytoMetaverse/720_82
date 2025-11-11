@@ -275,16 +275,21 @@ class PanoramaViewer {
         this.container.addEventListener('mouseup', (e) => this.onPointerEnd(e), false);
         this.container.addEventListener('wheel', (e) => this.onMouseWheel(e), false);
         
-        // 觸摸事件
-        this.container.addEventListener('touchstart', (e) => this.onPointerStart(e), false);
-        this.container.addEventListener('touchmove', (e) => this.onPointerMove(e), false);
-        this.container.addEventListener('touchend', (e) => this.onPointerEnd(e), false);
+        // 觸摸事件（使用passive: false以支持preventDefault）
+        this.container.addEventListener('touchstart', (e) => this.onPointerStart(e), { passive: false });
+        this.container.addEventListener('touchmove', (e) => this.onPointerMove(e), { passive: false });
+        this.container.addEventListener('touchend', (e) => this.onPointerEnd(e), { passive: false });
         
         // 點擊事件
         this.container.addEventListener('click', (e) => this.onClick(e), false);
         
         // 窗口大小改變
         window.addEventListener('resize', () => this.onWindowResize(), false);
+        
+        // 防止整個頁面的觸摸滾動
+        document.body.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+        }, { passive: false });
         
          // 空間切換按鈕
          document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -311,6 +316,11 @@ class PanoramaViewer {
         this.onPointerDownLat = this.lat;
         
         this.container.style.cursor = 'grabbing';
+        
+        // 防止觸摸時頁面滾動
+        if (event.type === 'touchstart') {
+            event.preventDefault();
+        }
     }
     
     onPointerMove(event) {
@@ -321,17 +331,31 @@ class PanoramaViewer {
         this.mouseY = clientY;
         
         if (this.isUserInteracting) {
-            this.lon = (this.onPointerDownMouseX - clientX) * 0.1 + this.onPointerDownLon;
-            this.lat = (clientY - this.onPointerDownMouseY) * 0.1 + this.onPointerDownLat;
+            // 移動端使用更高的靈敏度
+            const sensitivity = event.touches ? 0.15 : 0.1;
+            this.lon = (this.onPointerDownMouseX - clientX) * sensitivity + this.onPointerDownLon;
+            this.lat = (clientY - this.onPointerDownMouseY) * sensitivity + this.onPointerDownLat;
+            
+            // 防止觸摸時頁面滾動
+            if (event.type === 'touchmove') {
+                event.preventDefault();
+            }
         } else {
-            // 检测悬停
-            this.checkHover(clientX, clientY);
+            // 只在桌面端檢測懸停，移動端不需要
+            if (!event.touches) {
+                this.checkHover(clientX, clientY);
+            }
         }
     }
     
     onPointerEnd(event) {
         this.isUserInteracting = false;
         this.container.style.cursor = 'grab';
+        
+        // 防止觸摸結束時的默認行為
+        if (event.type === 'touchend') {
+            event.preventDefault();
+        }
     }
     
     onMouseWheel(event) {
@@ -349,9 +373,11 @@ class PanoramaViewer {
     
      onClick(event) {
          // 檢查是否真的是點擊（而不是拖動）
+         // 移動端使用更大的容差
+         const threshold = event.type === 'touchend' ? 15 : 5;
          const deltaX = Math.abs(event.clientX - this.onPointerDownMouseX);
          const deltaY = Math.abs(event.clientY - this.onPointerDownMouseY);
-         const isDrag = deltaX > 5 || deltaY > 5;
+         const isDrag = deltaX > threshold || deltaY > threshold;
          
          if (isDrag) {
              console.log('這是拖動操作，不是點擊');

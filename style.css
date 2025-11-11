@@ -12,6 +12,12 @@ body {
     height: 100vh;
     margin: 0;
     padding: 0;
+    /* 防止移動端雙擊縮放 */
+    touch-action: none;
+    /* 防止文字選擇 */
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
 }
 
 /* 3D环景容器 */
@@ -23,6 +29,9 @@ body {
     height: 100vh;
     cursor: grab;
     z-index: 1;
+    /* 移動端優化 */
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
 #viewer-container:active {
@@ -76,6 +85,8 @@ body {
     border-radius: 50px;
     backdrop-filter: blur(10px);
     pointer-events: auto;
+    /* 移動端優化 */
+    touch-action: auto;
 }
 
 .nav-btn {
@@ -88,12 +99,23 @@ body {
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s ease;
+    /* 移動端優化 */
+    -webkit-tap-highlight-color: rgba(255, 255, 255, 0.3);
+    touch-action: manipulation;
+    /* 增加點擊區域 */
+    min-width: 80px;
+    min-height: 44px;
 }
 
 .nav-btn:hover {
     background: rgba(255, 255, 255, 0.2);
     border-color: rgba(255, 255, 255, 0.5);
     transform: translateY(-2px);
+}
+
+.nav-btn:active {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(0.95);
 }
 
 .nav-btn.active {
@@ -106,17 +128,41 @@ body {
 @media (max-width: 768px) {
     .space-nav {
         top: 10px;
-        padding: 8px 15px;
+        padding: 10px 15px;
+        gap: 8px;
     }
     
     .nav-btn {
-        padding: 8px 15px;
-        font-size: 12px;
+        padding: 12px 18px;
+        font-size: 14px;
+        /* 移動端更大的點擊區域 */
+        min-width: 90px;
+        min-height: 48px;
     }
     
     .tooltip {
-        font-size: 12px;
-        padding: 6px 12px;
+        font-size: 14px;
+        padding: 8px 14px;
+        /* 移動端不顯示提示框 */
+        display: none;
+    }
+}
+
+/* 針對小屏幕的進一步優化 */
+@media (max-width: 480px) {
+    .space-nav {
+        width: calc(100% - 20px);
+        left: 10px;
+        right: 10px;
+        transform: none;
+        justify-content: space-between;
+    }
+    
+    .nav-btn {
+        flex: 1;
+        padding: 14px 10px;
+        font-size: 13px;
+        min-width: auto;
     }
 }
 
