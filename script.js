@@ -21,8 +21,8 @@ class PanoramaViewer {
         this.isUserInteracting = false;
         this.onPointerDownMouseX = 0;
         this.onPointerDownMouseY = 0;
-        this.lon = 0;
-        this.onPointerDownLon = 0;
+        this.lon = 180;  // 初始视角旋转180度
+        this.onPointerDownLon = 180;
         this.lat = 0;
         this.onPointerDownLat = 0;
         this.phi = 0;
@@ -624,8 +624,8 @@ class PanoramaViewer {
         console.log('执行切换空间:', spaceKey);
         this.currentSpace = spaceKey;
         
-        // 重置视角
-        this.lon = 0;
+        // 重置视角（旋转180度）
+        this.lon = 180;
         this.lat = 0;
         
         // 重置物件变体
