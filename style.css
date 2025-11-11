@@ -10,25 +10,26 @@ body {
     overflow: hidden;
     width: 100vw;
     height: 100vh;
+    margin: 0;
+    padding: 0;
 }
 
-/* 全屏Canvas */
-.panorama-canvas {
+/* 3D环景容器 */
+#viewer-container {
     position: fixed;
     top: 0;
     left: 0;
     width: 100vw;
     height: 100vh;
     cursor: grab;
-    display: block;
-    background: #000;
+    z-index: 1;
 }
 
-.panorama-canvas:active {
+#viewer-container:active {
     cursor: grabbing;
 }
 
-.panorama-canvas.highlight {
+#viewer-container.highlight {
     cursor: pointer;
 }
 
@@ -44,7 +45,7 @@ body {
 
 /* 提示框 */
 .tooltip {
-    position: absolute;
+    position: fixed;
     background: rgba(0, 0, 0, 0.8);
     color: white;
     padding: 8px 15px;
@@ -53,7 +54,7 @@ body {
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.3s ease;
-    z-index: 1000;
+    z-index: 9998;
     white-space: nowrap;
 }
 
@@ -69,11 +70,12 @@ body {
     transform: translateX(-50%);
     display: flex;
     gap: 10px;
-    z-index: 1000;
-    background: rgba(0, 0, 0, 0.5);
-    padding: 10px 20px;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 12px 24px;
     border-radius: 50px;
     backdrop-filter: blur(10px);
+    pointer-events: auto;
 }
 
 .nav-btn {
