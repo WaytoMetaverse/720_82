@@ -14,6 +14,7 @@ class PanoramaViewer {
         this.camera = null;
         this.renderer = null;
         this.sphere = null;
+        this.idSphere = null; // ID检测球体
         this.highlightMesh = null; // 高光网格
         
         // 交互相关
@@ -168,6 +169,15 @@ class PanoramaViewer {
             this.sphere.material.dispose();
         }
         
+        // 移除旧的ID球体
+        if (this.idSphere) {
+            this.scene.remove(this.idSphere);
+            if (this.idSphere.material.map) {
+                this.idSphere.material.map.dispose();
+            }
+            this.idSphere.material.dispose();
+        }
+        
         // 移除旧的高光层
         if (this.highlightMesh) {
             this.scene.remove(this.highlightMesh);
@@ -186,8 +196,27 @@ class PanoramaViewer {
         this.sphere = new THREE.Mesh(this.sphereGeometry, material);
         this.scene.add(this.sphere);
         
+        // 创建ID球体（用于点击检测，不可见）
+        const idTexture = new THREE.Texture(space.idMap);
+        idTexture.needsUpdate = true;
+        
+        const idMaterial = new THREE.MeshBasicMaterial({ 
+            map: idTexture,
+            visible: false  // 默认不可见
+        });
+        
+        const idGeometry = new THREE.SphereGeometry(498, 60, 40);
+        idGeometry.scale(-1, 1, 1);
+        
+        this.idSphere = new THREE.Mesh(idGeometry, idMaterial);
+        this.scene.add(this.idSphere);
+        
+        // 保存ID图用于颜色读取
+        this.idMapImage = space.idMap;
+        this.idTexture = idTexture;
+        
         // 创建高光层（稍微小一点的球体，避免Z-fighting）
-        const highlightGeometry = new THREE.SphereGeometry(499, 60, 40);
+        const highlightGeometry = new THREE.SphereGeometry(497, 60, 40);
         highlightGeometry.scale(-1, 1, 1);
         
         // 创建高光纹理canvas
@@ -207,7 +236,7 @@ class PanoramaViewer {
         this.highlightMesh = new THREE.Mesh(highlightGeometry, highlightMaterial);
         this.scene.add(this.highlightMesh);
         
-        // 更新ID图到canvas
+        // 更新ID图到canvas（用于调试显示）
         this.updateIdCanvas(space.idMap);
         
         console.log(`场景切换到: ${space.name}`);
@@ -267,17 +296,24 @@ class PanoramaViewer {
             });
         });
         
-        // 调试按钮
+        // 调试按钮 - 切换ID球体显示
         const debugBtn = document.getElementById('debugBtn');
         debugBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            this.idCanvas.classList.toggle('debug-show');
-            if (this.idCanvas.classList.contains('debug-show')) {
-                debugBtn.textContent = '隐藏ID图';
-                console.log('ID图已显示（半透明叠加）');
-            } else {
-                debugBtn.textContent = '显示ID图';
-                console.log('ID图已隐藏');
+            
+            if (this.idSphere) {
+                this.idSphere.material.visible = !this.idSphere.material.visible;
+                
+                if (this.idSphere.material.visible) {
+                    debugBtn.textContent = '隐藏ID图';
+                    // 让ID球体半透明
+                    this.idSphere.material.opacity = 0.5;
+                    this.idSphere.material.transparent = true;
+                    console.log('ID图球体已显示（半透明）');
+                } else {
+                    debugBtn.textContent = '显示ID图';
+                    console.log('ID图球体已隐藏');
+                }
             }
         });
     }
@@ -449,8 +485,25 @@ class PanoramaViewer {
     }
     
     getObjectAtScreenPosition(clientX, clientY) {
-        // 将屏幕坐标转换为球面UV坐标
-        const uv = this.screenToUV(clientX, clientY);
+        // 使用raycaster检测ID球体
+        this.mouse.x = (clientX / window.innerWidth) * 2 - 1;
+        this.mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+        
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+        
+        // 与ID球体相交检测
+        if (!this.idSphere) {
+            return null;
+        }
+        
+        const intersects = this.raycaster.intersectObject(this.idSphere);
+        
+        if (intersects.length === 0) {
+            return null;
+        }
+        
+        // 获取UV坐标
+        const uv = intersects[0].uv;
         if (!uv) {
             return null;
         }
@@ -469,15 +522,21 @@ class PanoramaViewer {
             return null;
         }
         
-        // 创建临时canvas读取像素
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = this.idMapImage.width;
-        tempCanvas.height = this.idMapImage.height;
-        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
-        tempCtx.drawImage(this.idMapImage, 0, 0);
+        // 创建临时canvas读取像素（只在需要时创建）
+        if (!this._tempCanvas) {
+            this._tempCanvas = document.createElement('canvas');
+            this._tempCtx = this._tempCanvas.getContext('2d', { willReadFrequently: true });
+        }
+        
+        if (this._tempCanvas.width !== this.idMapImage.width || 
+            this._tempCanvas.height !== this.idMapImage.height) {
+            this._tempCanvas.width = this.idMapImage.width;
+            this._tempCanvas.height = this.idMapImage.height;
+            this._tempCtx.drawImage(this.idMapImage, 0, 0);
+        }
         
         // 读取ID图上的颜色
-        const imageData = tempCtx.getImageData(x, y, 1, 1);
+        const imageData = this._tempCtx.getImageData(x, y, 1, 1);
         const r = imageData.data[0];
         const g = imageData.data[1];
         const b = imageData.data[2];
@@ -515,23 +574,6 @@ class PanoramaViewer {
         return null;
     }
     
-    screenToUV(clientX, clientY) {
-        // 使用raycaster检测射线与球体的交点
-        this.mouse.x = (clientX / window.innerWidth) * 2 - 1;
-        this.mouse.y = -(clientY / window.innerHeight) * 2 + 1;
-        
-        this.raycaster.setFromCamera(this.mouse, this.camera);
-        
-        const intersects = this.raycaster.intersectObject(this.sphere);
-        
-        if (intersects.length > 0) {
-            const uv = intersects[0].uv;
-            return uv;
-        }
-        
-        return null;
-    }
-    
     showTooltip(x, y, text) {
         const tooltip = document.getElementById('tooltip');
         tooltip.textContent = text;
@@ -563,6 +605,13 @@ class PanoramaViewer {
             
             try {
                 await this.loadSpaceImages('living', filename);
+                
+                // 清除临时canvas缓存
+                if (this._tempCanvas) {
+                    this._tempCanvas.width = 0;
+                    this._tempCanvas.height = 0;
+                }
+                
                 await this.loadScene('living');
             } catch (error) {
                 console.error('加载新图片失败', error);
@@ -584,6 +633,12 @@ class PanoramaViewer {
             space.objects.forEach(obj => {
                 obj.currentVariant = 0;
             });
+        }
+        
+        // 清除临时canvas缓存
+        if (this._tempCanvas) {
+            this._tempCanvas.width = 0;
+            this._tempCanvas.height = 0;
         }
         
         // 更新按钮状态
