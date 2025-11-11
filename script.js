@@ -515,8 +515,9 @@ class PanoramaViewer {
         }
         
         // 将UV坐标转换为ID图像素坐标
+        // 注意：Three.js的UV.y和图片坐标的Y轴方向相反，需要翻转
         const x = Math.floor(uv.x * this.idMapImage.width);
-        const y = Math.floor(uv.y * this.idMapImage.height);
+        const y = Math.floor((1 - uv.y) * this.idMapImage.height);
         
         if (x < 0 || x >= this.idMapImage.width || y < 0 || y >= this.idMapImage.height) {
             return null;
