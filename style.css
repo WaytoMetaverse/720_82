@@ -1,0 +1,231 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* 导航栏 */
+.navbar {
+    background: white;
+    border-radius: 15px;
+    padding: 20px 30px;
+    margin-bottom: 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.navbar h1 {
+    color: #667eea;
+    font-size: 28px;
+    font-weight: 700;
+}
+
+.space-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.space-btn {
+    padding: 12px 24px;
+    border: 2px solid #667eea;
+    background: white;
+    color: #667eea;
+    border-radius: 25px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.space-btn:hover {
+    background: #f0f0f0;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+}
+
+.space-btn.active {
+    background: #667eea;
+    color: white;
+}
+
+/* 查看器容器 */
+.viewer-container {
+    background: white;
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.panorama-canvas {
+    width: 100%;
+    height: 600px;
+    border-radius: 10px;
+    cursor: grab;
+    display: block;
+    background: #f0f0f0;
+}
+
+.panorama-canvas:active {
+    cursor: grabbing;
+}
+
+.panorama-canvas.highlight {
+    cursor: pointer;
+}
+
+.id-canvas {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+}
+
+/* 提示框 */
+.tooltip {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 8px 15px;
+    border-radius: 8px;
+    font-size: 14px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: 1000;
+    white-space: nowrap;
+}
+
+.tooltip.show {
+    opacity: 1;
+}
+
+/* 控制面板 */
+.control-panel {
+    margin-top: 20px;
+}
+
+.control-group h3 {
+    color: #667eea;
+    margin-bottom: 15px;
+    font-size: 18px;
+}
+
+.objects-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.object-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    transition: all 0.3s ease;
+}
+
+.object-item.active {
+    border-color: #667eea;
+    background: #e8ecff;
+}
+
+.color-indicator {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    border: 2px solid #ddd;
+}
+
+.object-name {
+    font-size: 14px;
+    color: #333;
+    font-weight: 500;
+}
+
+/* 信息面板 */
+.info-panel {
+    background: white;
+    border-radius: 15px;
+    padding: 20px 30px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.info-panel p {
+    color: #555;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .navbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .navbar h1 {
+        text-align: center;
+        font-size: 24px;
+    }
+    
+    .space-buttons {
+        justify-content: center;
+    }
+    
+    .panorama-canvas {
+        height: 400px;
+    }
+    
+    .info-panel {
+        flex-direction: column;
+        text-align: center;
+    }
+}
+
+/* 高光效果 */
+@keyframes pulse {
+    0%, 100% {
+        opacity: 0.6;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
+.highlight-overlay {
+    position: absolute;
+    pointer-events: none;
+    background: rgba(255, 255, 0, 0.3);
+    border: 2px solid rgba(255, 255, 0, 0.8);
+    animation: pulse 1.5s infinite;
+}
+

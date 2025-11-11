@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>环景导览系统</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 导航栏 -->
+        <div class="navbar">
+            <h1>环景导览系统</h1>
+            <div class="space-buttons">
+                <button class="space-btn active" data-space="living">客餐厅</button>
+                <button class="space-btn" data-space="master">主卧室</button>
+                <button class="space-btn" data-space="second">次卧室</button>
+            </div>
+        </div>
+
+        <!-- 主要环景显示区域 -->
+        <div class="viewer-container">
+            <!-- 环景图层 -->
+            <canvas id="panoramaCanvas" class="panorama-canvas"></canvas>
+            
+            <!-- ID图层（不可见，用于检测点击） -->
+            <canvas id="idCanvas" class="id-canvas"></canvas>
+            
+            <!-- 提示信息 -->
+            <div id="tooltip" class="tooltip"></div>
+            
+            <!-- 控制面板 -->
+            <div class="control-panel">
+                <div class="control-group">
+                    <h3>可互动物件</h3>
+                    <div id="objectsList" class="objects-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 信息面板 -->
+        <div class="info-panel">
+            <p>🖱️ 拖动查看环景</p>
+            <p>🎯 点击高亮物件进行互动</p>
+            <p>🏠 使用顶部按钮切换空间</p>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+
