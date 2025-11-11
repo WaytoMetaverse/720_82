@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>环景导览系统</title>
+    <title>環景導覽系統</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -13,18 +13,15 @@
     <!-- ID图层（隐藏，用于检测点击） -->
     <canvas id="idCanvas" class="id-canvas"></canvas>
     
-    <!-- 浮动空间切换按钮 -->
+    <!-- 浮動空間切換按鈕 -->
     <div class="space-nav">
-        <button class="nav-btn active" data-space="living">客餐厅</button>
-        <button class="nav-btn" data-space="master">主卧室</button>
-        <button class="nav-btn" data-space="second">次卧室</button>
+        <button class="nav-btn active" data-space="living">客餐廳</button>
+        <button class="nav-btn" data-space="master">主臥室</button>
+        <button class="nav-btn" data-space="second">次臥室</button>
     </div>
     
     <!-- 提示信息 -->
     <div id="tooltip" class="tooltip"></div>
-    
-    <!-- 调试按钮 -->
-    <button id="debugBtn" class="debug-btn">显示ID图</button>
 
     <!-- Three.js库 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
