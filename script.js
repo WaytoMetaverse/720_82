@@ -53,7 +53,7 @@ class PanoramaViewer {
                 panorama: null,
                 idMap: null,
                 objects: [
-                    { id: 'sofa', name: '沙發', color: '#00FF00', rgb: [0, 255, 0], variants: ['A', 'B', 'C'], currentVariant: 0 },
+                    { id: 'sofa', name: '沙發', color: '#00FF00', rgb: [0, 255, 0], variants: ['A', 'B', 'C', 'D'], currentVariant: 0 },
                     { id: 'table', name: '茶几', color: '#FF0000', rgb: [255, 0, 0], variants: ['A', 'B', 'C'], currentVariant: 0 }
                 ]
             },
